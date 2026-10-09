@@ -53,8 +53,8 @@ fn prompt_golden_digest_matches_versions() {
     // its hash is a string nothing checks. The pair is still asserted, because
     // the failure worth catching is a version bumped with the golden left
     // alone, which a digest comparison on its own reads as fine.
-    let recorded_versions = (22, 17);
-    let recorded_digest = "c923b5c9e01b456a530bb826edf0da852b2bf06409852f7467c29b73b09d799f";
+    let recorded_versions = (22, 18);
+    let recorded_digest = "2e973f1f9cc1bb29c35d8281d7482427c4da30d654ce6f9f560675a4ab0579ac";
 
     assert_eq!(
         (LIVE_PROMPT_VERSION, REPORT_PROMPT_VERSION),
@@ -282,6 +282,7 @@ fn report_brief_states_the_hint_rung() {
         practice_level: Some("intern"),
         evidence: "",
         behavioral_round: BehavioralRound::Opened,
+        follow_ups_released: false,
     });
     assert!(prompt.contains("candidate reached hint rung 2 of 3"));
     assert!(prompt.contains("1 hint was volunteered rather than requested"));
@@ -317,6 +318,7 @@ fn report_prompt_names_the_practice_level() {
         practice_level: Some("intern"),
         evidence: "",
         behavioral_round: BehavioralRound::Opened,
+        follow_ups_released: false,
     };
     let selected = report_prompt(base);
     assert!(selected.contains("candidate practiced for intern"));
@@ -422,6 +424,7 @@ fn live_instructions_pose_the_variant_and_hold_no_source_or_walkthrough() {
         practice_level: None,
         evidence: "",
         behavioral_round: BehavioralRound::Opened,
+        follow_ups_released: false,
     });
     assert!(report.contains("Reference notes on approaches"));
     assert!(report.contains("never name the published problem, its title, LeetCode"));
@@ -1160,19 +1163,19 @@ fn interview_contract_versions_are_one_closed_bundle() {
         "the bundle table has no row for {INTERVIEW_CONTRACT_BUNDLE_VERSION}"
     );
 
-    assert_eq!(INTERVIEW_CONTRACT_BUNDLE_VERSION, 30);
+    assert_eq!(INTERVIEW_CONTRACT_BUNDLE_VERSION, 31);
     assert_eq!(LIVE_PROMPT_VERSION, 22);
-    assert_eq!(REPORT_PROMPT_VERSION, 17);
+    assert_eq!(REPORT_PROMPT_VERSION, 18);
     assert_eq!(RUBRIC_VERSION, 1);
-    assert_eq!(REPORT_SCHEMA_VERSION, 2);
+    assert_eq!(REPORT_SCHEMA_VERSION, 3);
     assert_eq!(
         interview_contract_json(),
         json!({
-            "bundleVersion": 30,
+            "bundleVersion": 31,
             "livePromptVersion": 22,
-            "reportPromptVersion": 17,
+            "reportPromptVersion": 18,
             "rubricVersion": 1,
-            "reportSchemaVersion": 2,
+            "reportSchemaVersion": 3,
         })
     );
 }
