@@ -353,6 +353,12 @@ test("caret and focus changes reuse ranges until code or language changes", asyn
       editor.focus();
     });
     await page.keyboard.press("ControlOrMeta+A");
+    // Selecting all clears the bracket marks in a queued paint. Count the
+    // replacement only after that paint, whatever frame the keypress reached.
+    await page
+      .locator(".matching-bracket")
+      .first()
+      .waitFor({ state: "detached" });
     await page.evaluate(() => {
       window.overlayPaints = 0;
     });
