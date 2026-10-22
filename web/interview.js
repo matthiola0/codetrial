@@ -83,6 +83,7 @@ import {
   roomInterviewer,
   sanitizeReport,
   sessionReport,
+  LANGUAGE_KEY,
   SHOW_SOURCES_KEY,
   testPayload,
   timeWarningPayload,
@@ -1042,6 +1043,7 @@ function bindEvents() {
     languageChoiceCommitted = true;
     setLanguage(nodes.languageSelect.value);
     nodes.languageSelect.value = state.language;
+    writeStored(LANGUAGE_KEY, state.language);
   });
   for (const [button, step] of [
     [nodes.editorFontSmaller, -1],
@@ -1558,6 +1560,12 @@ async function connect(preflight, presenting = false) {
       throw new Error("Agree to the recording notice before starting.");
     const interviewId = await recordConsent();
     state.interviewId = interviewId;
+    // The token names the language the interview starts in, so a judge still
+    // loading must have its turn at the requested tab first; afterwards only
+    // the candidate switches.
+    await judgePromise;
+    languageChoiceCommitted = true;
+    if (!whiteboard) writeStored(LANGUAGE_KEY, state.language);
     // `hideExamples` goes only when ticked, so Jim is not told the examples are
     // on a screen that does not show them. The preflight holding the box is
     // closed for good by now, so this is the choice the page renders.
@@ -1570,6 +1578,7 @@ async function connect(preflight, presenting = false) {
         interviewId,
         interviewLoop,
         interviewMode: mode,
+        ...(!whiteboard ? { language: state.language } : {}),
         interviewProfile,
         ...(interviewGrounding ? { interviewGrounding } : {}),
         ...(nodes.interviewerAccent.value

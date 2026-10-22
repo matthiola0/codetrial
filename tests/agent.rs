@@ -343,6 +343,7 @@ fn prompt_samples() -> Value {
         ),
         "boardInstructions": board_instructions(problem, 45),
         "greeting": greeting(InterviewMode::Coding),
+        "chosenLanguageGreeting": greeting_with_language("Java"),
         "boardGreeting": greeting(InterviewMode::Whiteboard),
         "boardSilenceEmpty": board_silence_nudge(&empty, 0),
         "boardSilenceDrawn": board_silence_nudge(&board_working, 17),
