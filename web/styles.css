@@ -3351,6 +3351,18 @@ body:not([data-recording]) .replay-detail > :not(header) {
   cursor: not-allowed;
 }
 
+/* Fits the row's 2rem so the menu takes the checklist's empty last cell
+   without making the lobby any taller. */
+.lobby .editor-options-row select {
+  min-width: 0;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
 .lobby input[type="checkbox"] {
   margin: 0;
   accent-color: var(--accent);

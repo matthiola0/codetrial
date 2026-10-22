@@ -9,6 +9,7 @@
       content="Practice live, high-pressure technical interviews with an AI interviewer that watches your code, listens to your reasoning, and talks back in real time."
     />
     <link rel="stylesheet" href="/styles.css" />
+    <script src="/runtime-config.js"></script>
     <script type="module" src="/app.js"></script>
   </head>
   <body class="practice-page">
@@ -1798,6 +1799,18 @@
                 checked
               />
               Monospace font</label
+            >
+            <label
+              >Language
+              <select id="interview-language">
+                <option value="python" data-language="python">Python 3</option>
+                <option value="javascript" data-language="javascript">
+                  JavaScript
+                </option>
+                <option value="c" data-language="c">C</option>
+                <option value="cpp" data-language="cpp">C++</option>
+                <option value="java" data-language="java">Java</option>
+              </select></label
             >
           </fieldset>
         </section>

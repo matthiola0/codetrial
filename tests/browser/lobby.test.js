@@ -17,13 +17,18 @@ import { test, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  DEFAULT_RUNTIME_CONFIG,
   functionBody,
   launchChromium,
   reaches,
   read,
   startStaticServer,
 } from "./source.js";
-import { ACTIVE_CONTRACT, frameworkPhases } from "../../web/lib.js";
+import {
+  ACTIVE_CONTRACT,
+  LANGUAGE_KEY,
+  frameworkPhases,
+} from "../../web/lib.js";
 import { PRACTICE_LIST_KEY } from "../../web/practice-list.js";
 
 let browser = null;
@@ -56,6 +61,9 @@ before(async () => {
   if (!browser) return;
 
   ({ server, base } = await startStaticServer({
+    // Compiled runs off, as a server without Compiler Explorer answers; a test
+    // that needs them routes its own.
+    runtimeConfig: DEFAULT_RUNTIME_CONFIG,
     // Answered at once. A blanket delay here was about five of this file's
     // eleven seconds, paid twice per page load, and the two tests that need to
     // act while a request is in flight hold that request open instead, which is
@@ -3180,11 +3188,130 @@ lobbyTest("try again restores the saved language", async (page) => {
       },
     },
   ];
+  await rememberLanguage(page, "cpp");
+  await allowCompiledRuns(page);
   await lobby(page);
   await page.getByRole("button", { name: "Try again" }).click();
+  assert.equal(await page.inputValue("#interview-language"), "javascript");
+  assert.equal(await startedLanguage(page), "javascript");
+});
+
+/// What the interview page wrote after the candidate's last interview.
+const rememberLanguage = (page, language) =>
+  page.addInitScript(
+    ([key, value]) => localStorage.setItem(key, value),
+    [LANGUAGE_KEY, language],
+  );
+
+/// The lobby with Compiler Explorer on, so C, C++ and Java can be offered.
+const allowCompiledRuns = (page) =>
+  page.route("**/runtime-config.js", (route) =>
+    route.fulfill({
+      contentType: "text/javascript",
+      body: DEFAULT_RUNTIME_CONFIG.replace(
+        "ENABLED = false",
+        "ENABLED = true",
+      ).replace('BASE_URL = ""', 'BASE_URL = "https://godbolt.org"'),
+    }),
+  );
+
+/// Presses Start and reads the language the interview URL carries.
+async function startedLanguage(page) {
   await page.click("#start");
   await page.waitForURL("**/interview?**");
-  assert.equal(new URL(page.url()).searchParams.get("language"), "javascript");
+  return new URL(page.url()).searchParams.get("language");
+}
+
+/// Selects a card the difficulty filter may be hiding.
+const pickCard = (page, id) =>
+  page.locator(`[data-problem="${id}"]`).evaluate((card) => card.click());
+
+lobbyTest(
+  "the lobby preselects the language last interviewed in",
+  async (page) => {
+    await rememberLanguage(page, "java");
+    await allowCompiledRuns(page);
+    await lobby(page);
+    await page.waitForFunction(
+      () => document.querySelector("#interview-language").value === "java",
+    );
+    assert.equal(await startedLanguage(page), "java");
+  },
+);
+
+lobbyTest("a first interview starts in Python", async (page) => {
+  await lobby(page);
+  assert.equal(await page.inputValue("#interview-language"), "python");
+  assert.equal(await startedLanguage(page), "python");
+});
+
+lobbyTest(
+  "the lobby withholds a language this server or problem cannot run",
+  async (page) => {
+    await rememberLanguage(page, "java");
+    await lobby(page);
+    const option = (language) =>
+      page.locator(`#interview-language option[value="${language}"]`);
+    // The property, because Playwright's isDisabled reads an option as enabled.
+    const withheld = (language) =>
+      option(language).evaluate((node) => node.disabled);
+    // Compiled runs are off here, so Java waits for Code execution to be off.
+    assert.equal(await withheld("java"), true);
+    assert.match(await option("java").textContent(), /disabled by server/);
+    assert.equal(await page.inputValue("#interview-language"), "python");
+    await page.getByLabel("Code execution").uncheck();
+    assert.equal(await withheld("java"), false);
+    assert.equal(await page.inputValue("#interview-language"), "java");
+    await page.getByLabel("Code execution").check();
+    assert.equal(await page.inputValue("#interview-language"), "python");
+
+    // A class problem has no C harness, whatever the server allows.
+    await page.getByLabel("Code execution").uncheck();
+    await page.selectOption("#interview-language", "c");
+    await pickCard(page, "backend-pool-sampler");
+    await page.waitForFunction(() =>
+      document
+        .querySelector('#interview-language option[value="c"]')
+        .textContent.includes("class problem"),
+    );
+    assert.equal(await withheld("c"), true);
+    assert.equal(await page.inputValue("#interview-language"), "python");
+    assert.equal(await startedLanguage(page), "python");
+  },
+);
+
+lobbyTest(
+  "a remembered C still loading its judge is the language Start sends",
+  async (page) => {
+    await rememberLanguage(page, "c");
+    await allowCompiledRuns(page);
+    let release = () => {};
+    const held = new Promise((resolve) => (release = resolve));
+    await page.route("**/judges/*.json", async (route) => {
+      await held;
+      await route.continue();
+    });
+    try {
+      await lobby(page);
+      assert.match(
+        await page
+          .locator('#interview-language option[value="c"]')
+          .textContent(),
+        /waiting for judge/,
+      );
+      assert.equal(await startedLanguage(page), "c");
+    } finally {
+      release();
+    }
+  },
+);
+
+lobbyTest("a whiteboard interview carries no language", async (page) => {
+  await rememberLanguage(page, "javascript");
+  await lobby(page);
+  await page.click('[data-mode="whiteboard"]');
+  assert.equal(await page.locator("#interview-language").isDisabled(), true);
+  assert.equal(await startedLanguage(page), null);
 });
 
 lobbyTest(

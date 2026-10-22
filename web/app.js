@@ -1,6 +1,7 @@
 import { mountProblemGrid } from "./problem-grid.js";
 import {
   FRAMEWORKS,
+  LANGUAGE_KEY,
   SHOW_SOURCES_KEY,
   codingLoop,
   interviewMode,
@@ -26,7 +27,8 @@ import {
 } from "./progress.js";
 import { reportMarkdown, reportMarkup } from "./render.js";
 import { downloadMarkdown, reportFilename } from "./download.js";
-import { loadPageMap, loadTopicMap } from "./problem-data.js";
+import { loadJudge, loadPageMap, loadTopicMap } from "./problem-data.js";
+import { ALL_LANGUAGES, harnessAvailability } from "./compiler-explorer.js";
 import {
   availableTopics,
   filterProblems,
@@ -59,8 +61,14 @@ let duration;
 let interviewLoop = "coding_behavioral";
 /// Which surface the interview runs on; see the format row in index.html.
 let mode = "coding";
-/// The saved language attached to a problem selected through Try again.
-let retryLanguage = null;
+/// The language the next interview opens in: a retried attempt's, else the one
+/// the candidate last interviewed in. Kept apart from the menu, which shows it
+/// only once the judge allows it: C waits for the judge, and reading the menu
+/// meanwhile would turn a wanted C into Python.
+let wantedLanguage = storedLanguage();
+/// The selected problem's judge: undefined while it loads, null when there is
+/// none or it could not be fetched.
+let languageJudge;
 let reports = [];
 /// The practice focus the share box currently refers to.
 let sharedFocus = null;
@@ -108,6 +116,7 @@ let avoidedProblem;
 const nodes = {
   editorOptions: document.querySelector(".editor-options-row"),
   exampleDrawing: document.querySelector("#enable-example-drawing"),
+  language: document.querySelector("#interview-language"),
   accountStatus: document.querySelector("#account-status"),
   githubLogin: document.querySelector("#github-login"),
   loginLink: document.querySelector("#login-link"),
@@ -252,10 +261,15 @@ const editorControls = [...document.querySelectorAll('[name="editor-option"]')];
 const savedEditorOptions = loadEditorOptions();
 for (const input of editorControls) {
   input.checked = savedEditorOptions[input.value];
-  input.addEventListener("change", () =>
-    saveEditorOptions(selectedEditorOptions()),
-  );
+  // Code execution decides whether the compiled languages can be offered.
+  input.addEventListener("change", () => {
+    saveEditorOptions(selectedEditorOptions());
+    applyLanguages();
+  });
 }
+nodes.language.addEventListener("change", () => {
+  wantedLanguage = nodes.language.value;
+});
 
 function selectedEditorOptions() {
   return Object.fromEntries(
@@ -477,6 +491,7 @@ let starting = false;
 
 restoreSettings();
 renderPracticeList();
+applyLanguages();
 
 // The button by name, not by asking the event which element it was dispatched
 // to: the browser clears that property when dispatch ends, so every line after
@@ -499,8 +514,13 @@ start.addEventListener("click", async () => {
   destination.searchParams.set("mode", mode);
   if (mode === "coding" && nodes.exampleDrawing.checked)
     destination.searchParams.set("exampleDrawing", "1");
-  if (mode === "coding" && retryLanguage)
-    destination.searchParams.set("language", retryLanguage);
+  // Until the judge answers the menu cannot show a wanted C, so that is sent
+  // instead; the interview page holds it against the judge again.
+  if (mode === "coding")
+    destination.searchParams.set(
+      "language",
+      languageJudge === undefined ? wantedLanguage : nodes.language.value,
+    );
   setEditorOptions(destination.searchParams, selectedEditorOptions());
   const profile = {
     role: nodes.profileRole.value.trim(),
@@ -1242,9 +1262,57 @@ function setProblem(card, language = null) {
   // card here, which is what makes that possible.
   mark(problem?.button, false);
   mark(card?.button, true);
+  const changed = card !== problem;
   problem = card;
-  retryLanguage = language;
+  if (ALL_LANGUAGES.includes(language)) wantedLanguage = language;
+  if (changed) loadLanguages(card);
+  else applyLanguages();
   syncLobbyControls();
+}
+
+function storedLanguage() {
+  const stored = readStored(LANGUAGE_KEY);
+  return ALL_LANGUAGES.includes(stored) ? stored : "python";
+}
+
+/// Offers only the languages this problem's judge can run, by the rule the
+/// interview page's tabs follow. The judge is the card's page name, the id
+/// the lobby holds; an answer for a card no longer selected is dropped.
+function loadLanguages(card) {
+  languageJudge = undefined;
+  applyLanguages();
+  if (!card) return;
+  void loadJudge(card.id)
+    .catch(() => null)
+    .then((spec) => {
+      if (problem !== card) return;
+      languageJudge = spec;
+      applyLanguages();
+    });
+}
+
+function applyLanguages() {
+  const execution = selectedEditorOptions().execution;
+  for (const option of nodes.language.querySelectorAll("[data-language]")) {
+    const availability = harnessAvailability(
+      option.dataset.language,
+      languageJudge,
+      execution,
+    );
+    option.dataset.label ??= option.textContent.trim();
+    option.textContent = availability
+      ? `${option.dataset.label} (unavailable: ${availability.reason})`
+      : option.dataset.label;
+    option.title = availability?.message ?? "";
+    option.disabled = availability !== null;
+  }
+  nodes.language.value = harnessAvailability(
+    wantedLanguage,
+    languageJudge,
+    execution,
+  )
+    ? "python"
+    : wantedLanguage;
 }
 
 /// Says whether a button is the chosen one, in both the ways that answer has to

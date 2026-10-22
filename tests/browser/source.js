@@ -271,7 +271,7 @@ const STATIC_CONTENT_TYPES = {
 /// routes static serving cannot, such as an API a page under test fetches.
 /// Anything it declines falls through to `web/` on disk. `runtimeConfig`
 /// answers `/runtime-config.js`; omit it for a page that never fetches that
-/// file, such as the lobby.
+/// file.
 export async function startStaticServer({ handle, runtimeConfig } = {}) {
   const web = join(root, "web");
   const server = createServer(async (request, response) => {
