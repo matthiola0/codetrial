@@ -62,6 +62,9 @@ pub struct RuntimeBootstrap<'a> {
     pub end_sensitivity: Option<&'a str>,
     pub instructions: String,
     pub greeting: String,
+    /// The language chosen before joining, which the interview starts in
+    /// instead of asking for one. `None` keeps the opening question.
+    pub language: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -157,6 +160,7 @@ pub fn bootstrap_with_rounds<'a>(
         start_sensitivity: &config.gemini_start_sensitivity,
         end_sensitivity: config.gemini_end_sensitivity.as_deref(),
         greeting: greeting(interview_mode),
+        language: None,
     }
 }
 
