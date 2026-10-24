@@ -3867,10 +3867,7 @@ lobbyTest(
       assert.equal(await page.locator("#start").isDisabled(), true);
       releaseJudge();
       await page.locator("#language-note").waitFor();
-      assert.equal(
-        await page.locator("#lobby-language").inputValue(),
-        "python",
-      );
+      assert.equal(await page.locator("#lobby-language").inputValue(), "cpp");
       assert.equal(
         await page.locator('#lobby-language option[value="c"]').isDisabled(),
         true,

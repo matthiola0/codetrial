@@ -64,7 +64,7 @@ let languageSpec = null;
 /// The language the candidate wants: Try again's, else the last one used.
 /// The menu shows it whenever the problem offers it, so a problem that does not
 /// changes the menu without changing the wish.
-let preferredLanguage = readStored(LANGUAGE_KEY) ?? "python";
+let preferredLanguage = readStored(LANGUAGE_KEY) ?? "cpp";
 let duration;
 let interviewLoop = "coding_behavioral";
 /// Which surface the interview runs on; see the format row in index.html.
@@ -1437,8 +1437,11 @@ function syncLanguages() {
       : option.dataset.label;
     if (option.value === preferredLanguage) gap = availability;
   }
-  nodes.language.value = gap ? "python" : preferredLanguage;
-  if (!nodes.language.value) nodes.language.value = "python";
+  // C++, the usual interview language, unless it is withheld too.
+  const cpp = [...nodes.language.options].find(({ value }) => value === "cpp");
+  const fallback = cpp?.disabled ? "python" : "cpp";
+  nodes.language.value = gap ? fallback : preferredLanguage;
+  if (!nodes.language.value) nodes.language.value = fallback;
   nodes.languageNote.textContent = gap ? gap.message : "";
   nodes.languageNote.hidden = !gap;
 }
