@@ -17,6 +17,7 @@ import { test, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  DEFAULT_RUNTIME_CONFIG,
   functionBody,
   launchChromium,
   reaches,
@@ -56,6 +57,9 @@ before(async () => {
   if (!browser) return;
 
   ({ server, base } = await startStaticServer({
+    // index.html loads it for the language menu. Compiled runs are off here;
+    // the tests that need C turn them on per page.
+    runtimeConfig: DEFAULT_RUNTIME_CONFIG,
     // Answered at once. A blanket delay here was about five of this file's
     // eleven seconds, paid twice per page load, and the two tests that need to
     // act while a request is in flight hold that request open instead, which is
@@ -3829,6 +3833,84 @@ lobbyTest("try again restores the saved language", async (page) => {
   await page.click("#start");
   await page.waitForURL("**/interview?**");
   assert.equal(new URL(page.url()).searchParams.get("language"), "javascript");
+});
+
+/// Turns compiled runs on for one page, since the stub's runtime config has
+/// them off and C is the language a judge can withhold.
+async function compiledRuns(page) {
+  await page.route("**/runtime-config.js", (route) =>
+    route.fulfill({
+      contentType: "text/javascript",
+      body: 'globalThis.CODETRIAL_COMPILER_EXPLORER_ENABLED = true;\nglobalThis.CODETRIAL_COMPILER_EXPLORER_BASE_URL = "https://godbolt.org";\n',
+    }),
+  );
+}
+
+/// Selects a card whether or not the difficulty filter shows it.
+const pick = (page, id) =>
+  page.locator(`[data-problem="${id}"]`).dispatchEvent("click");
+
+lobbyTest(
+  "the language menu withholds what the problem's judge cannot run",
+  async (page) => {
+    await compiledRuns(page);
+    let releaseJudge = () => {};
+    const held = new Promise((resolve) => (releaseJudge = resolve));
+    await page.route("**/judges/backend-pool-sampler.json", async (route) => {
+      await held;
+      await route.continue();
+    });
+    try {
+      await lobby(page);
+      await page.selectOption("#lobby-language", "c");
+      await pick(page, "backend-pool-sampler");
+      assert.equal(await page.locator("#start").isDisabled(), true);
+      releaseJudge();
+      await page.locator("#language-note").waitFor();
+      assert.equal(
+        await page.locator("#lobby-language").inputValue(),
+        "python",
+      );
+      assert.equal(
+        await page.locator('#lobby-language option[value="c"]').isDisabled(),
+        true,
+      );
+      assert.equal(await page.locator("#start").isDisabled(), false);
+      // The wish outlives a problem that cannot honour it.
+      await pick(page, "chargeback-pair-match");
+      await page.waitForFunction(
+        () => document.querySelector("#lobby-language").value === "c",
+      );
+      assert.equal(await page.locator("#language-note").isHidden(), true);
+      await page.click("#start");
+      await page.waitForURL("**/interview?**");
+      assert.equal(new URL(page.url()).searchParams.get("language"), "c");
+    } finally {
+      releaseJudge();
+    }
+  },
+);
+
+lobbyTest(
+  "the language menu follows the server and the code execution option",
+  async (page) => {
+    await lobby(page);
+    const cpp = page.locator('#lobby-language option[value="cpp"]');
+    assert.equal(await cpp.isDisabled(), true);
+    await page
+      .getByRole("checkbox", { name: "Code execution", exact: true })
+      .uncheck();
+    assert.equal(await cpp.isDisabled(), false);
+  },
+);
+
+lobbyTest("a whiteboard interview is sent no language", async (page) => {
+  await lobby(page);
+  await page.getByRole("button", { name: "Whiteboard", exact: true }).click();
+  assert.equal(await page.locator("#lobby-language").isDisabled(), true);
+  await page.click("#start");
+  await page.waitForURL("**/interview?**");
+  assert.equal(new URL(page.url()).searchParams.get("language"), null);
 });
 
 lobbyTest(

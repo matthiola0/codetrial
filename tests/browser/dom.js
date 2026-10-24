@@ -209,6 +209,13 @@ class Element {
     return this.children.filter((child) => child.tag !== "#text").length;
   }
 
+  /// A select's options, inside the boundary `firstElementChild` keeps: the
+  /// ones a page appended, never those only the markup declares.
+  get options() {
+    if (this.tag !== "select") return undefined;
+    return this.children.filter((child) => child.tag === "option");
+  }
+
   *walk() {
     yield this;
     for (const child of this.children) yield* child.walk();

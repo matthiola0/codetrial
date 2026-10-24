@@ -1,6 +1,7 @@
 import { mountProblemGrid } from "./problem-grid.js";
 import {
   FRAMEWORKS,
+  LANGUAGE_KEY,
   SHOW_SOURCES_KEY,
   codingLoop,
   interviewMode,
@@ -26,7 +27,8 @@ import {
 } from "./progress.js";
 import { reportMarkdown, reportMarkup } from "./render.js";
 import { downloadMarkdown, reportFilename } from "./download.js";
-import { loadPageMap, loadTopicMap } from "./problem-data.js";
+import { loadJudge, loadPageMap, loadTopicMap } from "./problem-data.js";
+import { harnessAvailability } from "./compiler-explorer.js";
 import {
   availableTopics,
   filterProblems,
@@ -55,12 +57,18 @@ const SETTINGS_KEY = "codetrial.interviewSettings";
 const requestTimeoutMs = 10_000;
 
 let problem;
+/// The selected problem's judge, which decides the languages offered: undefined
+/// while it loads and null when there is no problem or it failed to load.
+/// Up here for the same reason as `durationCeiling` below.
+let languageSpec = null;
+/// The language the candidate wants: Try again's, else the last one used.
+/// The menu shows it whenever the problem offers it, so a problem that does not
+/// changes the menu without changing the wish.
+let preferredLanguage = readStored(LANGUAGE_KEY) ?? "python";
 let duration;
 let interviewLoop = "coding_behavioral";
 /// Which surface the interview runs on; see the format row in index.html.
 let mode = "coding";
-/// The saved language attached to a problem selected through Try again.
-let retryLanguage = null;
 let reports = [];
 /// The practice focus the share box currently refers to.
 let sharedFocus = null;
@@ -111,6 +119,8 @@ let avoidedProblem;
 const nodes = {
   editorOptions: document.querySelector(".editor-options-row"),
   exampleDrawing: document.querySelector("#enable-example-drawing"),
+  language: document.querySelector("#lobby-language"),
+  languageNote: document.querySelector("#language-note"),
   accountStatus: document.querySelector("#account-status"),
   githubLogin: document.querySelector("#github-login"),
   loginLink: document.querySelector("#login-link"),
@@ -262,9 +272,11 @@ const editorControls = [...document.querySelectorAll('[name="editor-option"]')];
 const savedEditorOptions = loadEditorOptions();
 for (const input of editorControls) {
   input.checked = savedEditorOptions[input.value];
-  input.addEventListener("change", () =>
-    saveEditorOptions(selectedEditorOptions()),
-  );
+  input.addEventListener("change", () => {
+    saveEditorOptions(selectedEditorOptions());
+    syncLanguages();
+    syncLobbyControls();
+  });
 }
 
 function selectedEditorOptions() {
@@ -529,6 +541,12 @@ for (const button of document.querySelectorAll("[data-mode]")) {
 }
 
 nodes.exampleDrawing.addEventListener("change", rememberSettings);
+nodes.language.addEventListener("change", () => {
+  preferredLanguage = nodes.language.value;
+  writeStored(LANGUAGE_KEY, preferredLanguage);
+  syncLanguages();
+  syncLobbyControls();
+});
 
 const start = document.querySelector("#start");
 
@@ -542,6 +560,7 @@ let signInFirst = false;
 let starting = false;
 
 restoreSettings();
+syncLanguages();
 renderPracticeList();
 
 // The button by name, not by asking the event which element it was dispatched
@@ -565,8 +584,8 @@ start.addEventListener("click", async () => {
   destination.searchParams.set("mode", mode);
   if (mode === "coding" && nodes.exampleDrawing.checked)
     destination.searchParams.set("exampleDrawing", "1");
-  if (mode === "coding" && retryLanguage)
-    destination.searchParams.set("language", retryLanguage);
+  if (mode === "coding")
+    destination.searchParams.set("language", nodes.language.value);
   setEditorOptions(destination.searchParams, selectedEditorOptions());
   const profile = {
     role: nodes.profileRole.value.trim(),
@@ -753,7 +772,14 @@ nodes.loginLink.addEventListener("click", async () => {
 // view of the account transition in one place, including the GET-only retry.
 function syncLobbyControls() {
   const accountBusy = accountUpdatePending();
-  start.disabled = !problem || starting || accountBusy || deletingReports;
+  // C is the one language the judge decides, so a C start waits for it rather
+  // than sending a language the problem may not run.
+  start.disabled =
+    !problem ||
+    (languageSpec === undefined && nodes.language.value === "c") ||
+    starting ||
+    accountBusy ||
+    deletingReports;
   nodes.loginLink.disabled =
     starting || loginPending || historyRefreshing || deletingReports;
   nodes.randomProblem.disabled =
@@ -1367,8 +1393,54 @@ function setProblem(card, language = null) {
   mark(card?.button, true);
   problem = card;
   searchVisibilityException = null;
-  retryLanguage = language;
+  if (language) preferredLanguage = language;
+  loadLanguages(card);
   syncLobbyControls();
+}
+
+/// Fetches the judge that decides which languages `card` offers. The answer
+/// for a card the candidate has since left is dropped.
+function loadLanguages(card) {
+  languageSpec = card ? undefined : null;
+  syncLanguages();
+  if (!card) return;
+  loadJudge(card.id)
+    .catch(() => null)
+    .then((spec) => {
+      if (problem !== card) return;
+      languageSpec = spec;
+      syncLanguages();
+      syncLobbyControls();
+    });
+}
+
+/// Offers what the interview's editor offers, by the same rule, and selects
+/// the preferred language when it is among them, else Python with the reason.
+function syncLanguages() {
+  const execution = selectedEditorOptions().execution;
+  // Until a judge is in hand only the server's rule applies: C is not withheld
+  // for a judge nobody has asked for yet, and Start waits for the answer.
+  const pending = !problem || languageSpec === undefined;
+  let gap = null;
+  for (const option of nodes.language.options) {
+    option.dataset.label ??= option.textContent.trim();
+    let availability = harnessAvailability(
+      option.value,
+      languageSpec,
+      execution,
+    );
+    if (pending && availability?.reason === "waiting for judge")
+      availability = null;
+    option.disabled = Boolean(availability);
+    option.textContent = availability
+      ? `${option.dataset.label} (unavailable: ${availability.reason})`
+      : option.dataset.label;
+    if (option.value === preferredLanguage) gap = availability;
+  }
+  nodes.language.value = gap ? "python" : preferredLanguage;
+  if (!nodes.language.value) nodes.language.value = "python";
+  nodes.languageNote.textContent = gap ? gap.message : "";
+  nodes.languageNote.hidden = !gap;
 }
 
 /// Says whether a button is the chosen one, in both the ways that answer has to
@@ -1407,6 +1479,7 @@ function setInterviewMode(value) {
   select("[data-mode]", document.querySelector(`[data-mode="${mode}"]`));
   nodes.editorOptions.disabled = mode === "whiteboard";
   nodes.exampleDrawing.disabled = mode === "whiteboard";
+  nodes.language.disabled = mode === "whiteboard";
   const note = document.querySelector("#mode-note");
   note.textContent =
     mode === "whiteboard"

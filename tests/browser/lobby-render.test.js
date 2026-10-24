@@ -44,6 +44,8 @@ await import("/app.js");
 const SIGNED_OUT = {
   "account-status": "Signed out",
   start: "Start interview",
+  // The default with no saved language: a choice, not news about the visitor.
+  "lobby-language": "python",
   "progress-summary": "Could not load progress saved on this device.",
   "practice-list-status":
     "0 problems in your list. Open the problem picker below to check problems. Kept for this visit only; browser storage is unavailable.",

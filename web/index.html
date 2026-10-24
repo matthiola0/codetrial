@@ -9,6 +9,8 @@
       content="Practice live, high-pressure technical interviews with an AI interviewer that watches your code, listens to your reasoning, and talks back in real time."
     />
     <link rel="stylesheet" href="/styles.css" />
+    <!-- Before app.js: the language menu asks whether compiled runs are on. -->
+    <script src="/runtime-config.js"></script>
     <script type="module" src="/app.js"></script>
   </head>
   <body class="practice-page">
@@ -1785,6 +1787,28 @@
             >
           </section>
           <p class="duration-note" id="mode-note" aria-live="polite" hidden></p>
+
+          <!-- app.js withholds what the chosen problem's judge cannot run, by
+               the rule the interview's editor uses, so the interview opens in
+               this language and Jim does not ask for one. -->
+          <label id="language-label" class="setting-label" for="lobby-language"
+            >Programming language</label
+          >
+          <select id="lobby-language" class="lobby-language">
+            <option value="python" data-language="python">Python 3</option>
+            <option value="javascript" data-language="javascript">
+              JavaScript
+            </option>
+            <option value="c" data-language="c">C</option>
+            <option value="cpp" data-language="cpp">C++</option>
+            <option value="java" data-language="java">Java</option>
+          </select>
+          <p
+            class="duration-note"
+            id="language-note"
+            aria-live="polite"
+            hidden
+          ></p>
 
           <fieldset class="editor-options-row">
             <legend>Editor options</legend>
